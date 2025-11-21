@@ -303,30 +303,12 @@ export const generateImageWithCustomStyle = async (request: AnalysisRequest, per
     const colors = persona.pomelli?.colors?.map(c => c.name).join(", ") || "Brand Colors";
     const mood = persona.pomelli?.toneOfVoice?.join(", ") || "Professional";
 
-    // Construct a sophisticated prompt based on the analyzed persona
-    const prompt = `
-      You are an expert visual director and photographer. 
-      Create a high-end, photorealistic brand concept image for the brand "${persona.brandName}".
-
-      [Brand Analysis]
-      - Philosophy: ${persona.philosophy.substring(0, 200)}...
-      - Target Audience: ${persona.targetAudience.substring(0, 100)}...
-      - Core Strategy: ${persona.coreStrategy.substring(0, 100)}...
-
-      [Visual Direction]
-      - Aesthetic Mood: ${aesthetic}
-      - Key Colors: ${colors}
-      - Brand Mood: ${mood}
-
-      [Photography Instructions]
-      - Style: **Photorealistic, Cinematic, 8k resolution, Highly Detailed.**
-      - Lighting: Professional studio lighting or dramatic natural light, emphasizing textures and materials.
-      - Composition: Balanced, high-quality commercial photography style.
-      - Subject: A scene or an abstract representation that perfectly embodies the brand's core value (e.g., a high-end interior for a space brand, a sleek product shot for a product brand).
-      - **Negative Prompt:** Do NOT include text, letters, watermarks, or low-quality vector art. No cartoons.
-
-      ${customStyle ? `[User Additional Request]: ${customStyle}` : ''}
-    `;
+    // Flatten the prompt for Gemini 2.5 Flash Image (Nano Banana)
+    // Nano Banana works best with a comma-separated list of visual descriptors.
+    const prompt = `High quality commercial photography of a ${persona.brandName} space, 
+    ${aesthetic} style, ${colors} tones, ${mood} atmosphere. 
+    ${customStyle ? customStyle : 'Premium interior design, cinematic lighting'}. 
+    8k resolution, photorealistic, architectural photography, highly detailed.`;
 
     return generateBrandImage(prompt);
 };
