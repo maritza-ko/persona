@@ -1,8 +1,9 @@
 
-import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { BrandPersona, AnalysisRequest, CustomInputs, PersonaFieldKey, FieldGuide, FIELD_METADATA, BuilderState } from "../types";
 
 // API Key needs to be quoted as a string literal
+// IMPORTANT: Ensure process.env.API_KEY is set, or replace with your key string for local testing.
 const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" });
 
 // --- Global Safety Settings (Relaxed to prevent false positives) ---
@@ -13,14 +14,35 @@ const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
 ];
 
+// --- Fallback Guides (Prevents app crash if AI fails) ---
+const DEFAULT_GUIDES: Record<string, string[]> = {
+  brandName: ["브랜드의 핵심 가치를 한 단어로 표현한다면?", "기억하기 쉬운 짧은 이름인가요, 의미가 담긴 이름인가요?", "어떤 언어(한글, 영어, 라틴어 등)를 선호하시나요?"],
+  philosophy: ["이 브랜드를 시작하게 된 결정적 계기는 무엇인가요?", "고객에게 절대 타협하지 않을 한 가지 약속은 무엇인가요?", "세상을 어떻게 긍정적으로 바꾸고 싶나요?"],
+  slogan: ["고객의 뇌리에 꽂힐 한 문장은 무엇인가요?", "브랜드의 성격을 가장 잘 나타내는 형용사는?", "경쟁사와 구분되는 우리만의 말투는?"],
+  coreTechnology: ["우리만 가지고 있는 특별한 기술이나 노하우는 무엇인가요?", "경쟁사가 쉽게 따라할 수 없는 진입 장벽은?", "숫자로 증명할 수 있는 스펙이 있나요?"],
+  coreStrategy: ["시장 진입을 위한 초기 필승 전략은 무엇인가요?", "어떤 채널을 통해 고객을 만날 계획인가요?", "수익을 극대화할 수 있는 비즈니스 모델은?"],
+  brandMent: ["고객에게 말을 걸 때 어떤 톤(친근한, 전문적인, 위트있는)을 사용하나요?", "브랜드를 사람으로 비유한다면 누구인가요?", "고객이 우리 브랜드를 보고 첫마디로 뭐라고 하길 원하나요?"],
+  targetAudience: ["이 제품/서비스가 없으면 안 되는 핵심 고객은 누구인가요?", "그들의 연령, 직업, 라이프스타일은?", "그들이 현재 겪고 있는 가장 큰 불만은 무엇인가요?"],
+  genZValue: ["Gen-Z 세대가 이 브랜드에 열광할 '힙한' 포인트는?", "SNS에 공유하고 싶은 시각적/경험적 요소는?", "그들의 가치관(환경, 공정성 등)과 어떻게 연결되나요?"],
+  customerCulture: ["고객들이 우리 브랜드를 통해 어떤 문화를 향유하길 원하나요?", "브랜드 팬덤이 모여서 어떤 활동을 하길 기대하나요?", "우리 브랜드가 주도할 새로운 트렌드는?"],
+  comparativeAdvantage: ["경쟁사 대비 압도적으로 뛰어난 한 가지는 무엇인가요?", "고객이 경쟁사 대신 우리를 선택해야 할 결정적 이유는?", "우리가 해결한 경쟁사의 치명적 단점은?"],
+  qualityLevel: ["품질 기준을 어디에 두고 있나요? (타협 없는 최고급 vs 가성비)", "품질 유지를 위한 구체적인 관리 시스템은?", "고객이 체감할 수 있는 품질 요소는?"],
+  priceLevel: ["시장 가격 대비 어떤 포지션을 취할 것인가요?", "가격 이상의 가치를 어떻게 증명할 것인가요?", "초기 진입 가격 전략은?"],
+  functionalBenefit: ["고객의 어떤 구체적인 고통(Pain Point)을 해결해주나요?", "사용 후 즉각적으로 느껴지는 편리함은?", "이 제품이 고객의 시간을 얼마나 아껴주나요?"],
+  experientialBenefit: ["구매 과정에서 고객이 느낄 특별한 감정은?", "서비스 이용 중 경험할 수 있는 즐거움은?", "오감을 만족시키는 요소가 있나요?"],
+  symbolicBenefit: ["이 브랜드를 사용하는 것이 고객의 이미지를 어떻게 높여주나요?", "고객의 자존감이나 소속감을 어떻게 충족시키나요?", "사회적으로 어떤 긍정적 메시지를 전달하나요?"],
+  keywords: ["브랜드를 대표하는 핵심 키워드 5가지는?", "검색엔진에서 우리를 찾을 때 입력할 단어는?", "해시태그로 사용하고 싶은 단어들은?"],
+  customerManagement: ["한 번 구매한 고객을 어떻게 단골로 만들 것인가요?", "충성 고객에게 제공할 특별한 혜택은?", "고객의 피드백을 어떻게 반영할 계획인가요?"]
+};
+
 // --- Helper for robust JSON extraction ---
 const cleanAndParseJson = (text: string): any => {
   try {
-    // 1. Remove Markdown code blocks (```json ... ``` or just ``` ... ```)
+    // 1. Remove Markdown code blocks strictly
     let cleanText = text.replace(/```json\s*([\s\S]*?)\s*```/gi, '$1');
     cleanText = cleanText.replace(/```\s*([\s\S]*?)\s*```/gi, '$1');
 
-    // 2. Find the first '{' and last '}' to handle potential intro/outro text
+    // 2. Find the valid JSON object wrapper
     const firstOpen = cleanText.indexOf('{');
     const lastClose = cleanText.lastIndexOf('}');
     
@@ -50,12 +72,12 @@ const SYSTEM_INSTRUCTION = `
 당신의 임무는 단순한 '설명'이 아니라, 시장을 관통하는 날카로운 '전략'과 '페르소나'를 창조하는 것입니다.
 
 [작성 절대 원칙]
-1. **독립성(Singular Focus):** 사용자가 PC방, 만화카페, 포차 중 하나의 아이디어를 입력하면, 오직 해당 업종의 특성에만 집중하세요. 절대 서로 다른 업종(예: PC방에 만화카페 컨셉)을 억지로 섞지 마세요.
+1. **독립성(Singular Focus):** 사용자가 PC방, 만화카페, 포차 중 하나의 아이디어를 입력하면, 오직 해당 업종의 특성에만 집중하세요. 절대 서로 다른 업종을 섞지 마세요.
 2. **구체성(Specifics):** "좋은 시설", "맛있는 음식" 같은 추상적인 표현을 절대 금지합니다. 대신 "RTX 4080", "독립형 굴방", "레트로 네온 사인"과 같이 업종에 맞는 구체적인 스펙과 묘사를 사용하세요.
 3. **문제 해결(Problem Solving):** 해당 업종의 고객이 겪는 구체적인 '고통(Pain Point)'을 정의하고, 기술적/시스템적 해결책을 제시하세요.
-4. **독자적 명명(Naming):** 남들이 다 쓰는 용어 대신, 우리 브랜드만의 내부 용어(예: 퓨어 에어 챔버, 힐링 캡슐, 홍콩 느와르 존 등)를 정의하여 사용하세요.
+4. **독자적 명명(Naming):** 남들이 다 쓰는 용어 대신, 우리 브랜드만의 내부 용어(예: 퓨어 에어 챔버, 힐링 캡슐 등)를 정의하여 사용하세요.
 5. **톤앤매너:** 부드러운 설명문이 아니라, 확신에 찬 '선언문'이나 전문적인 '기획서' 스타일로 작성하세요.
-6. **형식(Format):** 가독성을 위해 **소제목(###)**, **불렛 포인트(-)**, **볼드체(**)**를 적극적으로 사용하여 구조화하세요. 복잡한 마크다운(표, 코드블록 등)은 사용하지 마세요.
+6. **형식(Format):** **반드시** 소제목(###), 불렛 포인트(-), 볼드체(**)를 사용하여 구조화하세요. 복잡한 표나 마크다운 블록은 사용하지 마세요.
 `;
 
 // --- Standard Generation (Simple Mode) ---
@@ -77,18 +99,18 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
     사용자가 입력한 아이디어의 업종(PC방, 만화카페, 포차 등)을 정확히 파악하고,
     그 업종의 본질에 맞는 완벽한 브랜드 페르소나 JSON을 완성하세요.
     
-    [Reference Example (이 수준의 깊이로 작성하세요)]
+    [Reference Example]
     ${EXCELLENT_EXAMPLE}
 
     [입력 정보]
     - 브랜드/사업 아이디어: ${idea}
     - 참고 URL: ${url || "없음"}
-    - 확정된 브랜드명: ${brandName || "미정 (AI가 브랜드 컨셉에 맞는 이름 3가지 제안 및 그 중 최적의 하나를 brandName으로 선정)"}
+    - 확정된 브랜드명: ${brandName || "미정"}
 
     ${customInstructions ? `[사용자 추가 가이드]\n${customInstructions}` : ""}
 
     [요청 사항]
-    JSON 객체로 반환하세요. 각 항목은 최소 300자 이상(목록형 제외)의 깊이 있는 내용이어야 합니다.
+    JSON 객체로 반환하세요.
     
     [JSON 필드 구조 (총 17개 항목 + Pomelli)]
     1. brandName
@@ -124,7 +146,7 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
       contents: prompt,
       config: { 
         responseMimeType: "application/json",
-        safetySettings: SAFETY_SETTINGS // Apply safety settings
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -166,15 +188,16 @@ export const generatePlanningGuides = async (idea: string, brandName?: string): 
       contents: prompt,
       config: { 
         responseMimeType: "application/json",
-        safetySettings: SAFETY_SETTINGS // Apply safety settings
+        safetySettings: SAFETY_SETTINGS
       }
     });
     const text = response.text;
     if (!text) throw new Error("No guides returned");
     return cleanAndParseJson(text);
   } catch (error) {
-    console.error("Error generating guides:", error);
-    throw error;
+    console.warn("AI Guide Generation Failed, falling back to defaults:", error);
+    // Fallback to default guides to prevent app crash
+    return DEFAULT_GUIDES;
   }
 };
 
@@ -202,7 +225,7 @@ export const generateFieldDraft = async (
     [요청]
     위 내용을 바탕으로 항목(${fieldKey})을 작성하세요.
     설명 없이 내용만 반환하세요.
-    소제목(###), 불렛 포인트(-) 사용. 최소 300자.
+    반드시 소제목(###), 불렛 포인트(-), 볼드체(**)를 사용하여 가독성을 높이세요.
   `;
 
   try {
@@ -210,13 +233,13 @@ export const generateFieldDraft = async (
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
-        safetySettings: SAFETY_SETTINGS // Apply safety settings
+        safetySettings: SAFETY_SETTINGS
       }
     });
     return response.text || "내용을 생성할 수 없습니다.";
   } catch (error) {
     console.error(`Error generating draft for ${fieldKey}:`, error);
-    return "오류가 발생했습니다.";
+    return "오류가 발생했습니다. 다시 시도해주세요.";
   }
 };
 
@@ -248,14 +271,13 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
       contents: prompt,
       config: { 
         responseMimeType: "application/json",
-        safetySettings: SAFETY_SETTINGS // Apply safety settings
+        safetySettings: SAFETY_SETTINGS
       }
     });
     
     const text = response.text;
     if (!text) throw new Error("No data returned");
 
-    // Use robust JSON extraction
     return cleanAndParseJson(text) as BrandPersona;
   } catch (error) {
     console.error("Error finalizing persona:", error);
@@ -271,7 +293,6 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
       config: {
-        // Relaxed safety settings to prevent false positives
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -289,13 +310,12 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
 };
 
 export const generateImageWithCustomStyle = async (request: AnalysisRequest, persona: BrandPersona): Promise<string | null> => {
-    // Flash Image model prefers simple, keyword-heavy prompts without complex grammar
     const aesthetic = persona.pomelli?.brandAesthetic?.slice(0, 3).join(", ") || "Modern design";
     const colors = persona.pomelli?.colors?.slice(0, 2).map(c => c.name).join(", ") || "Brand Colors";
     const brandName = persona.brandName || "Brand";
     
-    // Very simple, keyword-based prompt for best success rate with Flash Image
-    const prompt = `Modern interior design for ${brandName}, ${aesthetic}, ${colors} color theme, high quality, photorealistic, 8k resolution, bright lighting, wide angle shot`;
+    // Simple, keyword-based prompt for Nano Banana model success
+    const prompt = `Interior design or Product shot for ${brandName}, ${aesthetic}, ${colors}, bright lighting, photorealistic, high quality`;
 
     return generateBrandImage(prompt);
 };

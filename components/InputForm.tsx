@@ -66,7 +66,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
                 <textarea
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
-                  placeholder="예: 친구들과 하루 종일 놀 수 있는 쾌적한 PC방.
+                  placeholder="친구들과 하루 종일 놀 수 있는 쾌적한 PC방.
 또는, 도심 속에서 힐링할 수 있는 아늑한 만화카페.
 또는, 퇴근 후 맛있는 안주와 술 한잔 기울이는 레트로 포차."
                   className="w-full h-40 px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none text-slate-700 placeholder-slate-400 bg-white leading-relaxed text-sm"

@@ -46,7 +46,6 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ data, imageUrl, onRes
         // Numbered Items (treated as bold paragraphs for simplicity in Word or ordered list)
         else if (/^\d+\.\s/.test(trimmed)) {
             if (inList) { html += '</ul>'; inList = false; }
-            // Simple p tag with bold number looks cleaner in simple HTML export
             const parts = trimmed.split(/(\d+\.\s)/);
             if(parts.length >= 2) {
                html += `<p><b>${parts[1]}</b>${parseBold(parts.slice(2).join(''))}</p>`;
