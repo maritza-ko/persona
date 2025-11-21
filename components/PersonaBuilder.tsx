@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons } from './Icons';
 import { 
   BuilderState, 
@@ -13,69 +13,39 @@ import { generateFieldDraft } from '../services/geminiService';
 interface PersonaBuilderProps {
   idea: string;
   guides: Record<string, string[]>;
-  initialBrandName?: string; 
   onComplete: (finalState: BuilderState) => void;
 }
 
-const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBrandName, onComplete }) => {
+const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, onComplete }) => {
   const [builderState, setBuilderState] = useState<BuilderState>({} as BuilderState);
   const [expandedField, setExpandedField] = useState<PersonaFieldKey | null>(null);
   const [userInput, setUserInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  
-  // Refs to scroll items into view
-  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Initialize builder state
+  // Initialize builder state if empty
   useEffect(() => {
     if (Object.keys(builderState).length === 0) {
       const initial: BuilderState = {} as BuilderState;
       FIELD_METADATA.forEach(field => {
-        let initialDraft = "";
-        let initialFinalized = false;
-
-        if (field.key === 'brandName' && initialBrandName) {
-            initialDraft = initialBrandName;
-            initialFinalized = true;
-        }
-
         initial[field.key] = {
-          draft: initialDraft,
-          userInput: field.key === 'brandName' && initialBrandName ? `확정된 이름: ${initialBrandName}` : "",
+          draft: "",
+          userInput: "",
           history: [],
-          isFinalized: initialFinalized,
+          isFinalized: false,
           isLoading: false
         };
       });
       setBuilderState(initial);
-      
-      // If brand name provided, jump to next, else start at brandName
-      if (initialBrandName) {
-         setExpandedField('philosophy');
-      } else {
-         setExpandedField('brandName');
-      }
+      setExpandedField('brandName'); // Open first by default
     }
   }, []);
-
-  // Auto-scroll when expandedField changes
-  useEffect(() => {
-    if (expandedField) {
-        const index = FIELD_METADATA.findIndex(f => f.key === expandedField);
-        if (index !== -1 && itemRefs.current[index]) {
-            // Delay slightly to allow accordion animation to start
-            setTimeout(() => {
-                itemRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 200);
-        }
-    }
-  }, [expandedField]);
 
   const handleExpand = (key: PersonaFieldKey) => {
     if (expandedField === key) {
       setExpandedField(null);
     } else {
       setExpandedField(key);
+      // Load saved user input for this field
       setUserInput(builderState[key]?.userInput || "");
     }
   };
@@ -83,6 +53,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
   const handleGenerateDraft = async (key: PersonaFieldKey) => {
     if (!userInput.trim()) return;
 
+    // Update state to loading
     setBuilderState(prev => ({
       ...prev,
       [key]: { ...prev[key], isLoading: true, userInput: userInput }
@@ -90,19 +61,14 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
     setIsGenerating(true);
 
     try {
-      // Current Brand Name context
-      let currentBrandName = initialBrandName;
-      if (!currentBrandName && builderState['brandName']?.isFinalized) {
-         currentBrandName = builderState['brandName'].draft;
-      }
-
+      // Build context from other finalized fields
       const context = Object.entries(builderState)
         .map(([k, v]) => [k, v] as [string, FieldState])
         .filter(([k, v]) => v.isFinalized && v.draft)
         .map(([k, v]) => `${k}: ${v.draft}`)
         .join("\n");
 
-      const draft = await generateFieldDraft(key, idea, userInput, context, currentBrandName);
+      const draft = await generateFieldDraft(key, idea, userInput, context);
 
       setBuilderState(prev => ({
         ...prev,
@@ -111,18 +77,24 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
           draft: draft, 
           history: [...prev[key].history, draft],
           isLoading: false,
-          isFinalized: true 
+          isFinalized: true // Auto-finalize on generation, can be edited
         }
       }));
 
-      // Auto-Advance Logic
+      // --- Auto-Advance Logic ---
+      // Find current index
       const currentIndex = FIELD_METADATA.findIndex(f => f.key === key);
+      // Check if there is a next field
       if (currentIndex !== -1 && currentIndex < FIELD_METADATA.length - 1) {
         const nextField = FIELD_METADATA[currentIndex + 1];
         
+        // Small delay to let the user see the result briefly before moving on
         setTimeout(() => {
           setExpandedField(nextField.key);
+          // Pre-load user input if exists, or empty string
           setUserInput(builderState[nextField.key]?.userInput || "");
+          
+          // Optional: Scroll logic could be added here if needed
         }, 600); 
       }
 
@@ -134,12 +106,16 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
   };
 
   const handleRefine = (key: PersonaFieldKey) => {
+    // Just set isFinalized to false to allow editing/regeneration logic (simplified for now)
+    // In a full version, this could open a "Revision Request" input.
+    // Here we just let them change the input and regenerate.
     setBuilderState(prev => ({
       ...prev,
       [key]: { ...prev[key], isFinalized: false }
     }));
   };
 
+  // Calculate progress
   const completedCount = Object.values(builderState).filter(s => (s as FieldState).isFinalized).length;
   const totalCount = FIELD_METADATA.length;
   const progress = Math.round((completedCount / totalCount) * 100);
@@ -161,6 +137,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Sidebar: Navigation (Desktop) / List */}
         <div className="lg:col-span-12 space-y-4">
           {FIELD_METADATA.map((field, index) => {
             const state = builderState[field.key];
@@ -169,11 +146,8 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
             const isDone = state?.isFinalized;
 
             return (
-              <div 
-                key={field.key} 
-                ref={el => itemRefs.current[index] = el}
-                className={`bg-white rounded-2xl border transition-all duration-300 overflow-hidden ${isOpen ? 'border-indigo-500 shadow-md ring-1 ring-indigo-100' : 'border-slate-200 hover:border-indigo-300'}`}
-              >
+              <div key={field.key} className={`bg-white rounded-2xl border transition-all duration-300 overflow-hidden ${isOpen ? 'border-indigo-500 shadow-md ring-1 ring-indigo-100' : 'border-slate-200 hover:border-indigo-300'}`}>
+                {/* Accordion Header */}
                 <button 
                   onClick={() => handleExpand(field.key)}
                   className="w-full px-6 py-4 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors text-left"
@@ -190,6 +164,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
                   <Icons.ArrowRight className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-90 text-indigo-500' : ''}`} />
                 </button>
 
+                {/* Accordion Content */}
                 {isOpen && (
                   <div className="px-6 pb-6 animate-fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -277,6 +252,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
         </div>
       </div>
 
+      {/* Final Action */}
       <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 z-30">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
            <div className="text-sm text-slate-500">
@@ -284,7 +260,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, initialBr
            </div>
            <button 
              onClick={() => onComplete(builderState)}
-             disabled={completedCount < 3}
+             disabled={completedCount < 3} // Minimum requirement
              className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-lg flex items-center gap-2"
            >
              <span>최종 페르소나 완성하기</span>
