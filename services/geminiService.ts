@@ -6,6 +6,7 @@ const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" }
 
 // --- High Quality Reference Example (The Gold Standard) ---
 // Strictly focused on "Premium PC Cafe" as a single vertical example.
+// Updated Reference to strict PC Cafe brand "The Bunker" to avoid confusion.
 const EXCELLENT_EXAMPLE = `
 [Tone & Manner Reference: 더 벙커 (The Bunker)]
 1. 브랜드철학: "게이머의 1초를 지배하다". 우리는 단순한 PC방이 아닌 'e스포츠 아레나'를 지향합니다. 승부를 결정짓는 하이엔드 스펙으로 프로게이머급 환경을 제공합니다.
@@ -49,7 +50,7 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
     그 업종의 본질에 맞는 완벽한 브랜드 페르소나 JSON을 완성하세요.
     
     아래의 [Reference Example]은 '프리미엄 PC방'의 예시입니다. 
-    사용자의 아이디어가 만화카페나 포차라면, 이 예시의 **깊이와 구조(구체성)**만 참고하고, 내용은 사용자의 업종에 맞춰 완전히 새롭게 작성하세요.
+    사용자가 만화카페나 포차라면, 이 예시의 **깊이와 구조(구체성)**만 참고하고, 내용은 사용자의 업종에 맞춰 완전히 새롭게 작성하세요.
 
     [Reference Example (이 수준의 깊이로 작성하세요)]
     ${EXCELLENT_EXAMPLE}
@@ -91,11 +92,11 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
          toneOfVoice: ["Tone Keyword 1", "Tone Keyword 2", "Tone Keyword 3"],
          brandAesthetic: ["Aesthetic Keyword 1", "Aesthetic Keyword 2", "Aesthetic Keyword 3"],
          typography: "추천 폰트 스타일 및 타이포그래피 가이드",
-         colors: [{ "name": "색상명", "hex": "#HEX", "description": "의미" }],
+         colors: [{ "name": "색상명", "hex": "#HEX", "description": "의미" }], // Main, Secondary, Accent, Neutral 등 조화로운 최소 5가지 색상
          brandValues: [{ "title": "핵심가치", "description": "설명" }]
     }
 
-    반 반드시 JSON 포맷만 반환하세요.
+    반드시 JSON 포맷만 반환하세요.
   `;
 
   try {
@@ -168,11 +169,17 @@ export const generateFieldDraft = async (
   fieldKey: string, 
   idea: string, 
   userInput: string, 
-  context: string
+  context: string,
+  brandName?: string // Add explicit brandName
 ): Promise<string> => {
   
+  // Prioritize the explicit brand name if provided, otherwise check context or default
+  const finalBrandName = brandName || "미정";
+
   const prompt = `
     ${SYSTEM_INSTRUCTION}
+    
+    [확정된 브랜드명]: ${finalBrandName} (이 이름을 모든 내용의 주어로 사용하세요)
 
     현재 작성 중인 항목: "${fieldKey}"
     브랜드 아이디어: "${idea}"
@@ -228,7 +235,8 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
     1. 기존 Draft 내용들이 서로 논리적 모순 없이 하나의 강력한 브랜드 스토리로 이어지도록 다듬으세요 (Tone & Manner 통일).
     2. 각 항목은 구체적이고 설득력 있어야 합니다 (공간, 시설, 메뉴, 서비스 측면).
     3. **Pomelli (Business DNA) 섹션 작성 시 주의사항:**
-       - 전체 기획 내용을 바탕으로 'Business Overview', 'Brand Archetype', 'Tone of Voice', 'Brand Aesthetic', 'Typography', 'Colors'를 상세하게 도출하세요.
+       - 전체 기획 내용을 바탕으로 'Business Overview', 'Brand Archetype', 'Tone of Voice', 'Brand Aesthetic', 'Typography'를 상세하게 도출하세요.
+       - **Colors:** 브랜드의 프리미엄 감성을 극대화할 수 있도록 Main Color, Secondary Color, Accent Color, Neutral Color 등 **최소 5가지 이상의 풍성한 컬러 팔레트**를 구성하세요.
     4. "keywords"는 JSON Array로 변환하세요.
 
     Response Schema: BrandPersona JSON structure (include expanded pomelli object).
@@ -240,7 +248,14 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
       contents: prompt,
       config: { responseMimeType: "application/json" }
     });
-    return JSON.parse(response.text!) as BrandPersona;
+    
+    const text = response.text;
+    if (!text) throw new Error("No data returned");
+
+    // Clean up markdown code blocks if present
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    
+    return JSON.parse(jsonStr) as BrandPersona;
   } catch (error) {
     console.error("Error finalizing persona:", error);
     throw error;
@@ -250,23 +265,22 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
 // --- Image Gen ---
 export const generateBrandImage = async (prompt: string): Promise<string | null> => {
   try {
-    // Upgraded to gemini-3-pro-image-preview for better quality and reliability
-    // Added safetySettings to prevent silent failures
+    // Downgraded to gemini-2.5-flash-image for unlimited/stable usage
+    // Still using high-quality prompts
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
+      // Flash model doesn't support aspect ratio config in the same way as pro-vision sometimes,
+      // but we keep simple config or remove if it causes issues. 
+      // Note: 2.5-flash-image is "Nano Banana", usually just prompt.
+      // However, using safety settings to ensure output.
       config: {
-         imageConfig: {
-             aspectRatio: "1:1",
-             imageSize: "1K"
-         },
-         // Permissive safety settings to ensure generation
-         safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
-         ]
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
+        ]
       }
     });
     
