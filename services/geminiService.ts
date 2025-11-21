@@ -3,7 +3,7 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { BrandPersona, AnalysisRequest, CustomInputs, PersonaFieldKey, FieldGuide, FIELD_METADATA, BuilderState } from "../types";
 
 // API Key needs to be quoted as a string literal
-// IMPORTANT: Ensure process.env.API_KEY is set, or replace with your key string for local testing.
+// IMPORTANT: The user requested to hardcode the API key here.
 const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" });
 
 // --- Global Safety Settings (Relaxed to prevent false positives) ---
