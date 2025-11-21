@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { BrandPersona, AnalysisRequest, CustomInputs, PersonaFieldKey, FieldGuide, FIELD_METADATA, BuilderState } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" });
@@ -25,6 +25,7 @@ const SYSTEM_INSTRUCTION = `
 3. **문제 해결(Problem Solving):** 해당 업종의 고객이 겪는 구체적인 '고통(Pain Point)'을 정의하고, 기술적/시스템적 해결책을 제시하세요.
 4. **독자적 명명(Naming):** 남들이 다 쓰는 용어 대신, 우리 브랜드만의 내부 용어(예: 퓨어 에어 챔버, 힐링 캡슐, 홍콩 느와르 존 등)를 정의하여 사용하세요.
 5. **톤앤매너:** 부드러운 설명문이 아니라, 확신에 찬 '선언문'이나 전문적인 '기획서' 스타일로 작성하세요.
+6. **형식(Format):** 가독성을 위해 **소제목(###)**, **불렛 포인트(-)**, **볼드체(**)**를 적극적으로 사용하여 구조화하세요. 복잡한 마크다운(표, 코드블록 등)은 사용하지 마세요.
 `;
 
 // --- Standard Generation (Simple Mode) ---
@@ -188,7 +189,7 @@ export const generateFieldDraft = async (
     
     - **Tone & Style Reference:** 앞서 제시한 '더 벙커' 예시처럼 구체적인 스펙(시설/장비), 고유 명사(메뉴/시스템명), 해결하려는 고통, 제공하는 혜택을 명확히 하세요.
     - **Context Awareness:** 사용자가 PC방을 입력했으면 PC방 내용만, 만화카페면 만화카페 내용만 작성하세요. 섞지 마세요.
-    - **Format:** 줄글보다는 소제목, 불렛 포인트, 넘버링을 적절히 활용하여 가독성을 높이세요.
+    - **Format:** 가독성을 위해 **소제목(###)**, **불렛 포인트(-)**, **볼드체(**)**를 적극 활용하세요.
     - **Length:** 내용은 최소 300자 이상 풍부하게 작성하세요.
 
     결과물은 설명 없이 내용(텍스트)만 반환하세요.
@@ -249,15 +250,32 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
 // --- Image Gen ---
 export const generateBrandImage = async (prompt: string): Promise<string | null> => {
   try {
+    // Upgraded to gemini-3-pro-image-preview for better quality and reliability
+    // Added safetySettings to prevent silent failures
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3-pro-image-preview',
       contents: { parts: [{ text: prompt }] },
+      config: {
+         imageConfig: {
+             aspectRatio: "1:1",
+             imageSize: "1K"
+         },
+         // Permissive safety settings to ensure generation
+         safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
+         ]
+      }
     });
+    
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
+    console.warn("Image generation response did not contain inlineData");
     return null;
   } catch (error) {
     console.error("Image Gen Error", error);

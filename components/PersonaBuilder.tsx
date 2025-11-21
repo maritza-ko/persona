@@ -80,6 +80,24 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ idea, guides, onComplet
           isFinalized: true // Auto-finalize on generation, can be edited
         }
       }));
+
+      // --- Auto-Advance Logic ---
+      // Find current index
+      const currentIndex = FIELD_METADATA.findIndex(f => f.key === key);
+      // Check if there is a next field
+      if (currentIndex !== -1 && currentIndex < FIELD_METADATA.length - 1) {
+        const nextField = FIELD_METADATA[currentIndex + 1];
+        
+        // Small delay to let the user see the result briefly before moving on
+        setTimeout(() => {
+          setExpandedField(nextField.key);
+          // Pre-load user input if exists, or empty string
+          setUserInput(builderState[nextField.key]?.userInput || "");
+          
+          // Optional: Scroll logic could be added here if needed
+        }, 600); 
+      }
+
     } catch (e) {
       console.error(e);
     } finally {

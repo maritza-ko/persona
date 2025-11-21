@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BrandPersona } from '../types';
 import { Icons } from './Icons';
@@ -12,6 +13,58 @@ interface ResultDashboardProps {
 const ResultDashboard: React.FC<ResultDashboardProps> = ({ data, imageUrl, onReset }) => {
 
   const handleExportDoc = () => {
+    // Helper function to convert custom markdown-like syntax to Word-compatible HTML
+    const formatForWord = (text: string) => {
+      if (!text) return '';
+      const lines = text.split('\n');
+      let html = '';
+      let inList = false;
+
+      // Helper to bold text
+      const parseBold = (str: string) => {
+        return str.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+      };
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+             if (inList) { html += '</ul>'; inList = false; }
+             html += '<br/>'; 
+             return; 
+        }
+
+        // Headers
+        if (trimmed.startsWith('###')) {
+           if (inList) { html += '</ul>'; inList = false; }
+           html += `<h3>${trimmed.replace(/^###\s*/, '')}</h3>`;
+        }
+        // List Items
+        else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ')) {
+           if (!inList) { html += '<ul>'; inList = true; }
+           html += `<li>${parseBold(trimmed.replace(/^[-*•]\s*/, ''))}</li>`;
+        }
+        // Numbered Items (treated as bold paragraphs for simplicity in Word or ordered list)
+        else if (/^\d+\.\s/.test(trimmed)) {
+            if (inList) { html += '</ul>'; inList = false; }
+            // Simple p tag with bold number looks cleaner in simple HTML export
+            const parts = trimmed.split(/(\d+\.\s)/);
+            if(parts.length >= 2) {
+               html += `<p><b>${parts[1]}</b>${parseBold(parts.slice(2).join(''))}</p>`;
+            } else {
+               html += `<p>${parseBold(trimmed)}</p>`;
+            }
+        }
+        // Paragraphs
+        else {
+           if (inList) { html += '</ul>'; inList = false; }
+           html += `<p>${parseBold(trimmed)}</p>`;
+        }
+      });
+
+      if (inList) html += '</ul>';
+      return html;
+    };
+
     // Construct HTML content for the Word/Google Doc
     const content = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -19,109 +72,108 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ data, imageUrl, onRes
         <meta charset='utf-8'>
         <title>${data.brandName} Brand Persona</title>
         <style>
-          body { font-family: 'Malgun Gothic', sans-serif; line-height: 1.6; color: #333; }
-          h1 { font-size: 24pt; color: #4f46e5; border-bottom: 2px solid #e0e7ff; padding-bottom: 10px; }
-          h2 { font-size: 18pt; color: #333; margin-top: 30px; background-color: #f8fafc; padding: 10px; border-left: 5px solid #4f46e5; }
-          h3 { font-size: 14pt; color: #6366f1; margin-top: 20px; }
-          p { margin-bottom: 10px; font-size: 11pt; }
-          .section { margin-bottom: 20px; }
-          .tag { display: inline-block; background: #eef2ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 10pt; margin-right: 5px; border: 1px solid #c7d2fe; }
-          .color-box { width: 20px; height: 20px; display: inline-block; border: 1px solid #ccc; margin-right: 5px; vertical-align: middle; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f1f5f9; color: #333; }
+          body { font-family: 'Malgun Gothic', sans-serif; line-height: 1.5; color: #333; }
+          h1 { font-size: 28pt; color: #1e293b; border-bottom: 3px solid #4f46e5; padding-bottom: 15px; margin-bottom: 30px; }
+          h2 { font-size: 20pt; color: #fff; background-color: #4f46e5; padding: 10px 15px; margin-top: 40px; margin-bottom: 20px; border-radius: 4px; }
+          h3 { font-size: 14pt; color: #4338ca; margin-top: 25px; margin-bottom: 10px; border-left: 4px solid #4338ca; padding-left: 10px; }
+          p { margin-bottom: 12px; font-size: 11pt; text-align: justify; }
+          ul { margin-bottom: 15px; }
+          li { margin-bottom: 5px; }
+          b { color: #0f172a; }
+          .tag { display: inline-block; background: #eef2ff; color: #4338ca; padding: 4px 10px; border-radius: 15px; font-size: 10pt; margin-right: 5px; border: 1px solid #c7d2fe; }
+          .color-box { width: 50px; height: 20px; display: inline-block; border: 1px solid #ccc; margin-right: 10px; vertical-align: middle; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+          th { background-color: #f8fafc; color: #333; font-weight: bold; }
+          .meta-info { font-size: 10pt; color: #64748b; margin-bottom: 40px; }
         </style>
       </head>
       <body>
-        <h1>${data.brandName} - Brand Persona Report</h1>
-        <p><strong>Slogan:</strong> ${data.slogan}</p>
+        <h1>${data.brandName}</h1>
+        <p class="meta-info">
+          <strong>Slogan:</strong> ${data.slogan}<br/>
+          <strong>Generated by:</strong> Brand Persona Architect
+        </p>
         
         <h2>1. Identity & Strategy</h2>
-        <div class="section">
-          <h3>브랜드 철학</h3>
-          <p>${data.philosophy.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>핵심 전략</h3>
-          <p>${data.coreStrategy.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>핵심 기술/역량</h3>
-          <p>${data.coreTechnology.replace(/\n/g, '<br/>')}</p>
-        </div>
+        
+        <h3>브랜드 철학</h3>
+        ${formatForWord(data.philosophy)}
+        
+        <h3>핵심 전략</h3>
+        ${formatForWord(data.coreStrategy)}
+        
+        <h3>핵심 기술/역량</h3>
+        ${formatForWord(data.coreTechnology)}
 
         <h2>2. Market & Customer</h2>
-        <div class="section">
-          <h3>고객 정의 (Target)</h3>
-          <p>${data.targetAudience.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>Gen-Z 가치</h3>
-          <p>${data.genZValue.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>고객 문화 창조</h3>
-          <p>${data.customerCulture.replace(/\n/g, '<br/>')}</p>
-        </div>
+        
+        <h3>고객 정의 (Target)</h3>
+        ${formatForWord(data.targetAudience)}
+        
+        <h3>Gen-Z 가치</h3>
+        ${formatForWord(data.genZValue)}
+        
+        <h3>고객 문화 창조</h3>
+        ${formatForWord(data.customerCulture)}
 
         <h2>3. Benefits & Value</h2>
-        <div class="section">
-          <h3>기능적 혜택</h3>
-          <p>${data.functionalBenefit.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>경험적 혜택</h3>
-          <p>${data.experientialBenefit.replace(/\n/g, '<br/>')}</p>
-        </div>
-         <div class="section">
-          <h3>상징적 혜택</h3>
-          <p>${data.symbolicBenefit.replace(/\n/g, '<br/>')}</p>
-        </div>
+        
+        <h3>기능적 혜택 (Pain-Point)</h3>
+        ${formatForWord(data.functionalBenefit)}
+        
+        <h3>경험적 혜택</h3>
+        ${formatForWord(data.experientialBenefit)}
+        
+        <h3>상징적 혜택</h3>
+        ${formatForWord(data.symbolicBenefit)}
 
         <h2>4. Positioning & Tone</h2>
-        <div class="section">
-          <h3>브랜드 멘트</h3>
-          <p>${data.brandMent.replace(/\n/g, '<br/>')}</p>
-        </div>
-        <div class="section">
-          <h3>품질/가격 수준</h3>
-          <p><strong>품질:</strong> ${data.qualityLevel}</p>
-          <p><strong>가격:</strong> ${data.priceLevel}</p>
-        </div>
+        
+        <h3>브랜드 멘트</h3>
+        ${formatForWord(data.brandMent)}
+        
+        <h3>비교 우위 속성</h3>
+        ${formatForWord(data.comparativeAdvantage)}
+
+        <h3>품질 및 가격</h3>
+        <p><b>품질 수준:</b></p>
+        ${formatForWord(data.qualityLevel)}
+        <p><b>가격 정책:</b></p>
+        ${formatForWord(data.priceLevel)}
 
         <h2>5. Pomelli (Business DNA)</h2>
-        <div class="section">
-           <h3>Overview</h3>
-           <p><strong>Tagline:</strong> "${data.pomelli.tagline}"</p>
-           <p><strong>Archetype:</strong> ${data.pomelli.brandArchetype}</p>
-           <p>${data.pomelli.businessOverview}</p>
-        </div>
         
-        <div class="section">
-           <h3>Visual Identity</h3>
-           <p><strong>Aesthetic Keywords:</strong> ${data.pomelli.brandAesthetic.join(', ')}</p>
-           <p><strong>Typography:</strong> ${data.pomelli.typography}</p>
-           <h4>Brand Colors</h4>
-           <table>
-             <tr><th>Name</th><th>Hex</th><th>Description</th></tr>
-             ${data.pomelli.colors.map(c => `
-               <tr>
-                 <td><span class="color-box" style="background-color:${c.hex}"></span>${c.name}</td>
-                 <td>${c.hex}</td>
-                 <td>${c.description}</td>
-               </tr>
-             `).join('')}
-           </table>
-        </div>
+        <h3>Overview</h3>
+        <p><b>Tagline:</b> "${data.pomelli.tagline}"</p>
+        <p><b>Archetype:</b> ${data.pomelli.brandArchetype}</p>
+        <p>${data.pomelli.businessOverview}</p>
         
-        <div class="section">
-           <h3>Tone & Values</h3>
-           <p><strong>Tone of Voice:</strong> ${data.pomelli.toneOfVoice.join(', ')}</p>
-           <h4>Core Values</h4>
-           <ul>
-             ${data.pomelli.brandValues.map(v => `<li><strong>${v.title}:</strong> ${v.description}</li>`).join('')}
-           </ul>
-        </div>
+        <h3>Visual Identity</h3>
+        <p><b>Aesthetic Keywords:</b></p>
+        <p>${data.pomelli.brandAesthetic.map(k => `<span class="tag">#${k}</span>`).join('')}</p>
+        
+        <p><b>Typography:</b> ${data.pomelli.typography}</p>
+        
+        <h4>Brand Colors</h4>
+        <table>
+          <tr><th>Color</th><th>Name / Hex</th><th>Description</th></tr>
+          ${data.pomelli.colors.map(c => `
+            <tr>
+              <td><span class="color-box" style="background-color:${c.hex}"></span></td>
+              <td><b>${c.name}</b><br/>${c.hex}</td>
+              <td>${c.description}</td>
+            </tr>
+          `).join('')}
+        </table>
+        
+        <h3>Tone & Values</h3>
+        <p><b>Tone of Voice:</b> ${data.pomelli.toneOfVoice.join(', ')}</p>
+        
+        <h4>Core Values</h4>
+        <ul>
+          ${data.pomelli.brandValues.map(v => `<li><b>${v.title}:</b> ${v.description}</li>`).join('')}
+        </ul>
 
       </body>
       </html>
@@ -182,7 +234,7 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ data, imageUrl, onRes
                </div>
              )}
              <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/60 backdrop-blur-md text-white text-xs rounded-full">
-               Nano Banana AI Generated
+               Generated by Gemini 3 Pro
              </div>
           </div>
           
