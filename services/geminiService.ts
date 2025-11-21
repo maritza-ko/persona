@@ -5,22 +5,32 @@ import { BrandPersona, AnalysisRequest, CustomInputs, PersonaFieldKey, FieldGuid
 // API Key needs to be quoted as a string literal
 const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" });
 
-// Helper for robust JSON extraction
-const extractJson = (text: string): any => {
+// --- Global Safety Settings (Relaxed to prevent false positives) ---
+const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
+];
+
+// --- Helper for robust JSON extraction ---
+const cleanAndParseJson = (text: string): any => {
   try {
-    // 1. Try finding the first '{' and last '}'
-    const firstOpen = text.indexOf('{');
-    const lastClose = text.lastIndexOf('}');
+    // 1. Remove Markdown code blocks (```json ... ``` or just ``` ... ```)
+    let cleanText = text.replace(/```json\s*([\s\S]*?)\s*```/gi, '$1');
+    cleanText = cleanText.replace(/```\s*([\s\S]*?)\s*```/gi, '$1');
+
+    // 2. Find the first '{' and last '}' to handle potential intro/outro text
+    const firstOpen = cleanText.indexOf('{');
+    const lastClose = cleanText.lastIndexOf('}');
     
     if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-      const jsonStr = text.substring(firstOpen, lastClose + 1);
-      return JSON.parse(jsonStr);
+      cleanText = cleanText.substring(firstOpen, lastClose + 1);
     }
     
-    // 2. Fallback: Try parsing the whole text if clean
-    return JSON.parse(text);
+    return JSON.parse(cleanText);
   } catch (e) {
-    console.error("JSON Extraction Failed:", e);
+    console.error("JSON Extraction Failed. Raw text:", text);
     throw new Error("Failed to parse JSON response from AI.");
   }
 };
@@ -112,12 +122,15 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: { responseMimeType: "application/json" }
+      config: { 
+        responseMimeType: "application/json",
+        safetySettings: SAFETY_SETTINGS // Apply safety settings
+      }
     });
 
     const text = response.text;
     if (!text) throw new Error("No data returned");
-    return extractJson(text) as BrandPersona;
+    return cleanAndParseJson(text) as BrandPersona;
   } catch (error) {
     console.error("Error generating brand persona:", error);
     throw error;
@@ -151,11 +164,14 @@ export const generatePlanningGuides = async (idea: string, brandName?: string): 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: { responseMimeType: "application/json" }
+      config: { 
+        responseMimeType: "application/json",
+        safetySettings: SAFETY_SETTINGS // Apply safety settings
+      }
     });
     const text = response.text;
     if (!text) throw new Error("No guides returned");
-    return extractJson(text);
+    return cleanAndParseJson(text);
   } catch (error) {
     console.error("Error generating guides:", error);
     throw error;
@@ -193,6 +209,9 @@ export const generateFieldDraft = async (
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        safetySettings: SAFETY_SETTINGS // Apply safety settings
+      }
     });
     return response.text || "내용을 생성할 수 없습니다.";
   } catch (error) {
@@ -227,14 +246,17 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: { responseMimeType: "application/json" }
+      config: { 
+        responseMimeType: "application/json",
+        safetySettings: SAFETY_SETTINGS // Apply safety settings
+      }
     });
     
     const text = response.text;
     if (!text) throw new Error("No data returned");
 
     // Use robust JSON extraction
-    return extractJson(text) as BrandPersona;
+    return cleanAndParseJson(text) as BrandPersona;
   } catch (error) {
     console.error("Error finalizing persona:", error);
     throw error;
@@ -250,12 +272,7 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
       contents: { parts: [{ text: prompt }] },
       config: {
         // Relaxed safety settings to prevent false positives
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
     
@@ -272,12 +289,13 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
 };
 
 export const generateImageWithCustomStyle = async (request: AnalysisRequest, persona: BrandPersona): Promise<string | null> => {
-    // Flash Image model prefers simple, keyword-heavy prompts
-    const aesthetic = persona.pomelli?.brandAesthetic?.slice(0, 3).join(", ") || "Modern";
+    // Flash Image model prefers simple, keyword-heavy prompts without complex grammar
+    const aesthetic = persona.pomelli?.brandAesthetic?.slice(0, 3).join(", ") || "Modern design";
     const colors = persona.pomelli?.colors?.slice(0, 2).map(c => c.name).join(", ") || "Brand Colors";
+    const brandName = persona.brandName || "Brand";
     
-    // Simplified prompt structure for higher success rate with Nano Banana
-    const prompt = `Interior photography of ${persona.brandName}, ${aesthetic} style, ${colors} color palette, photorealistic, 8k, cinematic lighting`;
+    // Very simple, keyword-based prompt for best success rate with Flash Image
+    const prompt = `Modern interior design for ${brandName}, ${aesthetic}, ${colors} color theme, high quality, photorealistic, 8k resolution, bright lighting, wide angle shot`;
 
     return generateBrandImage(prompt);
 };
