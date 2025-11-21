@@ -2,11 +2,30 @@
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { BrandPersona, AnalysisRequest, CustomInputs, PersonaFieldKey, FieldGuide, FIELD_METADATA, BuilderState } from "../types";
 
+// API Key needs to be quoted as a string literal
 const ai = new GoogleGenAI({ apiKey: "AIzaSyCMO5BlFviSyKVLDo0eZu0xdbdbutC_f9c" });
 
+// Helper for robust JSON extraction
+const extractJson = (text: string): any => {
+  try {
+    // 1. Try finding the first '{' and last '}'
+    const firstOpen = text.indexOf('{');
+    const lastClose = text.lastIndexOf('}');
+    
+    if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+      const jsonStr = text.substring(firstOpen, lastClose + 1);
+      return JSON.parse(jsonStr);
+    }
+    
+    // 2. Fallback: Try parsing the whole text if clean
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("JSON Extraction Failed:", e);
+    throw new Error("Failed to parse JSON response from AI.");
+  }
+};
+
 // --- High Quality Reference Example (The Gold Standard) ---
-// Strictly focused on "Premium PC Cafe" as a single vertical example.
-// Updated Reference to strict PC Cafe brand "The Bunker" to avoid confusion.
 const EXCELLENT_EXAMPLE = `
 [Tone & Manner Reference: 더 벙커 (The Bunker)]
 1. 브랜드철학: "게이머의 1초를 지배하다". 우리는 단순한 PC방이 아닌 'e스포츠 아레나'를 지향합니다. 승부를 결정짓는 하이엔드 스펙으로 프로게이머급 환경을 제공합니다.
@@ -33,7 +52,6 @@ const SYSTEM_INSTRUCTION = `
 export const generateBrandPersonaData = async (request: AnalysisRequest): Promise<BrandPersona> => {
   const { idea, url, brandName, customInputs } = request;
 
-  // Build specific instructions based on custom inputs
   let customInstructions = "";
   if (customInputs) {
     Object.entries(customInputs).forEach(([key, value]) => {
@@ -49,9 +67,6 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
     사용자가 입력한 아이디어의 업종(PC방, 만화카페, 포차 등)을 정확히 파악하고,
     그 업종의 본질에 맞는 완벽한 브랜드 페르소나 JSON을 완성하세요.
     
-    아래의 [Reference Example]은 '프리미엄 PC방'의 예시입니다. 
-    사용자가 만화카페나 포차라면, 이 예시의 **깊이와 구조(구체성)**만 참고하고, 내용은 사용자의 업종에 맞춰 완전히 새롭게 작성하세요.
-
     [Reference Example (이 수준의 깊이로 작성하세요)]
     ${EXCELLENT_EXAMPLE}
 
@@ -64,36 +79,30 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
 
     [요청 사항]
     JSON 객체로 반환하세요. 각 항목은 최소 300자 이상(목록형 제외)의 깊이 있는 내용이어야 합니다.
-    단순 나열이 아니라, **왜(Why)**, **어떻게(How)**, **무엇을(What)**이 논리적으로 연결되게 하세요.
-
-    [JSON 필드 구조]
-    1. brandName: (String) 확정된 이름 또는 AI 제안명
-    2. brandNameSuggestions: (String Array) 이름 후보 3개
-    3. philosophy: (String) 브랜드 철학 (우리의 신념, 약속, 절대 타협하지 않는 원칙)
-    4. slogan: (String) 슬로건 (철학을 한 문장으로 응축)
-    5. coreTechnology: (String) 핵심 기술/역량 (시설 스펙, 조리 공정, 시스템 명칭 등 구체적으로)
-    6. coreStrategy: (String) 핵심 전략 (시장 진입 전략, 수익 구조, 차별화 포인트)
-    7. brandMent: (String) 브랜드 멘트 (고객에게 건네는 약속, 1/2/3 번호 매겨서 구체적으로)
-    8. targetAudience: (String) 고객 정의 (단순 인구통계가 아닌, 라이프스타일과 욕구 중심)
-    9. genZValue: (String) Gen-Z 가치 (작은 사치, 힙한 경험, 인증샷, 도파민 등)
-    10. customerCulture: (String) 고객 문화 창조 (단계별 문화 형성 전략)
-    11. comparativeAdvantage: (String) 비교 우위 속성 (경쟁사 대비 명확한 우위 요소 나열)
-    12. qualityLevel: (String) 품질 수준 (타협하지 않는 품질 기준과 그 이유 - 장비, 식자재 등)
-    13. priceLevel: (String) 가격 수준 (가격 책정의 논리와 가성비/가심비 전략)
-    14. functionalBenefit: (String) 기능적 혜택 (고객의 고통을 해결하는 구체적 기능/시설)
-    15. experientialBenefit: (String) 경험적 혜택 (입장부터 퇴장까지의 감정적 경험)
-    16. symbolicBenefit: (String) 상징적 혜택 (브랜드를 소비함으로써 얻는 이미지)
-    17. keywords: (String Array) 브랜드 키워드 5개 이상
-    18. customerManagement: (String) 고객 관리 철학 (단골 및 팬덤 형성 전략)
+    
+    [JSON 필드 구조 (총 17개 항목 + Pomelli)]
+    1. brandName
+    2. brandNameSuggestions
+    3. philosophy
+    4. slogan
+    5. coreTechnology
+    6. coreStrategy
+    7. brandMent
+    8. targetAudience
+    9. genZValue
+    10. customerCulture
+    11. comparativeAdvantage
+    12. qualityLevel
+    13. priceLevel
+    14. functionalBenefit
+    15. experientialBenefit
+    16. symbolicBenefit
+    17. keywords (Array)
+    18. customerManagement
     19. pomelli: {
-         businessOverview: "사업 개요 (Business Overview) - 무엇을 하는 브랜드인지 2문장 요약",
-         tagline: "짧고 강렬한 영문/한글 태그라인",
-         brandArchetype: "브랜드 아키타입 (예: The Creator, The Hero, The Explorer 등)",
-         toneOfVoice: ["Tone Keyword 1", "Tone Keyword 2", "Tone Keyword 3"],
-         brandAesthetic: ["Aesthetic Keyword 1", "Aesthetic Keyword 2", "Aesthetic Keyword 3"],
-         typography: "추천 폰트 스타일 및 타이포그래피 가이드",
-         colors: [{ "name": "색상명", "hex": "#HEX", "description": "의미" }], // Main, Secondary, Accent, Neutral 등 조화로운 최소 5가지 색상
-         brandValues: [{ "title": "핵심가치", "description": "설명" }]
+         businessOverview, tagline, brandArchetype, toneOfVoice[], brandAesthetic[], typography,
+         colors: [{ name, hex, description }] (최소 5가지 색상: Main, Secondary, Accent, Neutral 1, Neutral 2),
+         brandValues: [{ title, description }]
     }
 
     반드시 JSON 포맷만 반환하세요.
@@ -108,7 +117,7 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
 
     const text = response.text;
     if (!text) throw new Error("No data returned");
-    return JSON.parse(text) as BrandPersona;
+    return extractJson(text) as BrandPersona;
   } catch (error) {
     console.error("Error generating brand persona:", error);
     throw error;
@@ -117,28 +126,17 @@ export const generateBrandPersonaData = async (request: AnalysisRequest): Promis
 
 // --- Builder Mode Functions ---
 
-// 1. Generate Planning Guides for ALL fields at once
+// 1. Generate Planning Guides
 export const generatePlanningGuides = async (idea: string, brandName?: string): Promise<Record<string, string[]>> => {
   const fieldsList = FIELD_METADATA.map(f => f.key).join(", ");
   
   const prompt = `
     당신은 까다롭고 날카로운 브랜드 컨설팅 퍼실리테이터입니다.
-    사용자가 단순한 아이디어를 넘어서, 구체적이고 실행 가능한 전략을 짜낼 수 있도록 유도해야 합니다.
-    
     사용자 아이디어: "${idea}"
     브랜드명: "${brandName || "미정"}"
 
-    [주의사항]
-    사용자가 입력한 아이디어의 업종(PC방, 만화카페, 포차 등)을 정확히 파악하고,
-    해당 업종에서만 나올 수 있는 전문적인 질문을 던지세요. 두루뭉술한 일반적인 질문은 하지 마세요.
-
     다음 17가지 항목에 대해 사용자에게 질문할 "기획 가이드(질문)" 3가지를 제안하세요.
-
-    [질문 스타일 예시]
-    - 나쁜 예: "브랜드 철학은 무엇인가요?" (너무 추상적임)
-    - 좋은 예(PC방): "최고 사양을 찾는 게이머들이 우리 매장에 와서 '와, 여기 미쳤다'라고 말하게 만들 '압도적인 장비 스펙'은 무엇입니까?"
-    - 좋은 예(만화카페): "고객이 남의 시선을 신경 쓰지 않고 가장 편안하게 뒹굴거릴 수 있는 우리만의 '공간 구조(굴방/다락방 등)'의 특징은 무엇입니까?"
-    - 좋은 예(포차): "술맛을 돋우는 우리 포차만의 조명 온도와 음악 선곡(BGM) 스타일은 구체적으로 어떤 느낌입니까?"
+    업종에 맞는 구체적이고 날카로운 질문이어야 합니다.
 
     대상 항목: ${fieldsList}
     
@@ -157,7 +155,7 @@ export const generatePlanningGuides = async (idea: string, brandName?: string): 
     });
     const text = response.text;
     if (!text) throw new Error("No guides returned");
-    return JSON.parse(text);
+    return extractJson(text);
   } catch (error) {
     console.error("Error generating guides:", error);
     throw error;
@@ -170,36 +168,25 @@ export const generateFieldDraft = async (
   idea: string, 
   userInput: string, 
   context: string,
-  brandName?: string // Add explicit brandName
+  brandName?: string
 ): Promise<string> => {
   
-  // Prioritize the explicit brand name if provided, otherwise check context or default
   const finalBrandName = brandName || "미정";
 
   const prompt = `
     ${SYSTEM_INSTRUCTION}
     
-    [확정된 브랜드명]: ${finalBrandName} (이 이름을 모든 내용의 주어로 사용하세요)
-
+    [확정된 브랜드명]: ${finalBrandName}
     현재 작성 중인 항목: "${fieldKey}"
     브랜드 아이디어: "${idea}"
     
-    [사용자의 핵심 기획 의도 (이 내용을 반드시 구체화하여 반영하세요)]
-    "${userInput}"
-
-    [참고 - 현재까지 확정된 다른 항목들]
-    ${context}
+    [사용자의 핵심 기획 의도]: "${userInput}"
+    [참고 - 다른 항목들]: ${context}
 
     [요청]
-    위 내용을 바탕으로 해당 항목(${fieldKey})에 들어갈 내용을 작성하세요.
-    단순한 서술이 아니라, 전략 기획서의 한 페이지처럼 작성하세요.
-    
-    - **Tone & Style Reference:** 앞서 제시한 '더 벙커' 예시처럼 구체적인 스펙(시설/장비), 고유 명사(메뉴/시스템명), 해결하려는 고통, 제공하는 혜택을 명확히 하세요.
-    - **Context Awareness:** 사용자가 PC방을 입력했으면 PC방 내용만, 만화카페면 만화카페 내용만 작성하세요. 섞지 마세요.
-    - **Format:** 가독성을 위해 **소제목(###)**, **불렛 포인트(-)**, **볼드체(**)**를 적극 활용하세요.
-    - **Length:** 내용은 최소 300자 이상 풍부하게 작성하세요.
-
-    결과물은 설명 없이 내용(텍스트)만 반환하세요.
+    위 내용을 바탕으로 항목(${fieldKey})을 작성하세요.
+    설명 없이 내용만 반환하세요.
+    소제목(###), 불렛 포인트(-) 사용. 최소 300자.
   `;
 
   try {
@@ -216,7 +203,6 @@ export const generateFieldDraft = async (
 
 // 3. Finalize and Assemble
 export const finalizePersona = async (idea: string, builderState: BuilderState): Promise<BrandPersona> => {
-  // Construct current state summary
   let summary = "";
   Object.entries(builderState).forEach(([key, state]) => {
     summary += `[${key}]: ${state.draft}\n`;
@@ -226,20 +212,15 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
     ${SYSTEM_INSTRUCTION}
 
     [브랜드 아이디어]: ${idea}
-    
-    [확정된 브랜드 기획 내용 (Drafts)]
+    [확정된 브랜드 기획 내용]:
     ${summary}
 
     위 내용을 종합하여 최종 "BrandPersona" JSON 객체를 완성하세요.
     
-    1. 기존 Draft 내용들이 서로 논리적 모순 없이 하나의 강력한 브랜드 스토리로 이어지도록 다듬으세요 (Tone & Manner 통일).
-    2. 각 항목은 구체적이고 설득력 있어야 합니다 (공간, 시설, 메뉴, 서비스 측면).
-    3. **Pomelli (Business DNA) 섹션 작성 시 주의사항:**
-       - 전체 기획 내용을 바탕으로 'Business Overview', 'Brand Archetype', 'Tone of Voice', 'Brand Aesthetic', 'Typography'를 상세하게 도출하세요.
-       - **Colors:** 브랜드의 프리미엄 감성을 극대화할 수 있도록 Main Color, Secondary Color, Accent Color, Neutral Color 등 **최소 5가지 이상의 풍성한 컬러 팔레트**를 구성하세요.
-    4. "keywords"는 JSON Array로 변환하세요.
-
-    Response Schema: BrandPersona JSON structure (include expanded pomelli object).
+    Pomelli (Business DNA) 섹션 필수 포함:
+    - colors: Main, Secondary, Accent, Neutral 1, Neutral 2 등 최소 5가지 이상의 색상 팔레트.
+    
+    반드시 JSON 포맷만 반환하세요. 마크다운 코드 블록을 포함하지 마세요.
   `;
 
   try {
@@ -252,10 +233,8 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
     const text = response.text;
     if (!text) throw new Error("No data returned");
 
-    // Clean up markdown code blocks if present
-    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
-    
-    return JSON.parse(jsonStr) as BrandPersona;
+    // Use robust JSON extraction
+    return extractJson(text) as BrandPersona;
   } catch (error) {
     console.error("Error finalizing persona:", error);
     throw error;
@@ -265,16 +244,12 @@ export const finalizePersona = async (idea: string, builderState: BuilderState):
 // --- Image Gen ---
 export const generateBrandImage = async (prompt: string): Promise<string | null> => {
   try {
-    // Downgraded to gemini-2.5-flash-image for unlimited/stable usage
-    // Still using high-quality prompts
+    // Using gemini-2.5-flash-image (Nano Banana) for unlimited usage
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
-      // Flash model doesn't support aspect ratio config in the same way as pro-vision sometimes,
-      // but we keep simple config or remove if it causes issues. 
-      // Note: 2.5-flash-image is "Nano Banana", usually just prompt.
-      // However, using safety settings to ensure output.
       config: {
+        // Relaxed safety settings to prevent false positives
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
@@ -289,7 +264,6 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
-    console.warn("Image generation response did not contain inlineData");
     return null;
   } catch (error) {
     console.error("Image Gen Error", error);
@@ -298,17 +272,12 @@ export const generateBrandImage = async (prompt: string): Promise<string | null>
 };
 
 export const generateImageWithCustomStyle = async (request: AnalysisRequest, persona: BrandPersona): Promise<string | null> => {
-    const customStyle = request.customInputs?.['imageStyle'];
-    const aesthetic = persona.pomelli?.brandAesthetic?.join(", ") || "Modern, Premium";
-    const colors = persona.pomelli?.colors?.map(c => c.name).join(", ") || "Brand Colors";
-    const mood = persona.pomelli?.toneOfVoice?.join(", ") || "Professional";
-
-    // Flatten the prompt for Gemini 2.5 Flash Image (Nano Banana)
-    // Nano Banana works best with a comma-separated list of visual descriptors.
-    const prompt = `High quality commercial photography of a ${persona.brandName} space, 
-    ${aesthetic} style, ${colors} tones, ${mood} atmosphere. 
-    ${customStyle ? customStyle : 'Premium interior design, cinematic lighting'}. 
-    8k resolution, photorealistic, architectural photography, highly detailed.`;
+    // Flash Image model prefers simple, keyword-heavy prompts
+    const aesthetic = persona.pomelli?.brandAesthetic?.slice(0, 3).join(", ") || "Modern";
+    const colors = persona.pomelli?.colors?.slice(0, 2).map(c => c.name).join(", ") || "Brand Colors";
+    
+    // Simplified prompt structure for higher success rate with Nano Banana
+    const prompt = `Interior photography of ${persona.brandName}, ${aesthetic} style, ${colors} color palette, photorealistic, 8k, cinematic lighting`;
 
     return generateBrandImage(prompt);
 };

@@ -34,7 +34,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
       <div className="p-8 md:p-10 pb-0 text-center">
         <h2 className="text-3xl font-bold text-slate-900 mb-3">브랜드 페르소나 구축</h2>
         <p className="text-slate-500 mb-8 leading-relaxed">
-          추상적인 아이디어를 <span className="font-bold text-indigo-600">18가지 구체적 전략</span>과 <span className="font-bold text-fuchsia-600">Pomelli (Business DNA)</span>로 완벽하게 설계해드립니다.
+          추상적인 아이디어를 <span className="font-bold text-indigo-600">17가지 구체적 전략</span>과 <span className="font-bold text-fuchsia-600">Pomelli (Business DNA)</span>로 완벽하게 설계해드립니다.
         </p>
         
         <div className="inline-flex bg-slate-100 p-1 rounded-xl mb-6">
@@ -113,7 +113,7 @@ const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
              <div>
                <h3 className="text-lg font-bold text-indigo-900 mb-1">AI와 함께하는 심층 브랜드 설계</h3>
                <p className="text-indigo-700 text-sm leading-relaxed mb-3">
-                 단순한 자동 생성이 아닙니다. 18가지 핵심 항목에 대해 AI가 던지는 날카로운 질문(Guide)에 답하며, 당신만의 독보적인 브랜드를 직접 완성해보세요.<br/>
+                 단순한 자동 생성이 아닙니다. 17가지 핵심 항목에 대해 AI가 던지는 날카로운 질문(Guide)에 답하며, 당신만의 독보적인 브랜드를 직접 완성해보세요.<br/>
                  마지막 단계에서 브랜드의 시각적 유전자, <strong>Pomelli (Business DNA)</strong>까지 도출됩니다.
                </p>
                <ul className="text-sm text-indigo-600 space-y-1 list-disc list-inside">
